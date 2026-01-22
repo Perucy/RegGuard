@@ -8,6 +8,9 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     DEBUG: bool = True
 
+    HOST: str = "0.0.0.0"
+    PORT: int = 8000
+    
     # Api keys
     ANTHROPIC_API_KEY: str
 
