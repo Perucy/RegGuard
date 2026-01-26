@@ -95,5 +95,3 @@ if __name__ == "__main__":
     print("\n" + result['output'])
 
     # print(app.get_graph().print_ascii()) visualize graph structure
-
-
