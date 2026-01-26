@@ -1,35 +1,28 @@
-from langchain_core.tools import tool
-from langchain_anthropic import ChatAnthropic
 from langchain.agents import create_agent
+from langchain_anthropic import ChatAnthropic
 from regguard.core.config import settings
+from langsmith import traceable
+from langsmith.wrappers import wrap_anthropic
+import anthropic
 
-@tool
-def calculator(expression: str) -> str:
-    """ Perform basic arithmetic calculations """
-    result = eval(expression)
-    return str(result)
+client = wrap_anthropic(anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY))
 
-def create_calculator_agent():
-   
-    llm = ChatAnthropic(
-       model='claude-sonnet-4-5-20250929',
-       api_key=settings.ANTHROPIC_API_KEY
-    )
+@traceable(run_type="tool", name="Retrieve Context")
+def my_tool(question: str) -> str:
+  return "During this morning's meeting, we solved all world conflict."
 
-    agent = create_agent(
-       model=llm,
-       tools=[calculator],
-       system_prompt="You're a helpful assistant that can perform basic arithmetic calculations.",
-    )
+@traceable(name="Chat Pipeline")
+def chat_pipeline(question: str):
+  context = my_tool(question)
+  messages = [
+      { "role": "user", "content": f"Question: {question}\nContext: {context}"}
+  ]
+  message = client.messages.create(
+      model="claude-sonnet-4-5-20250929",
+      messages=messages,
+      max_tokens=1024,
+      system="You are a helpful assistant. Please respond to the user's request only based on the given context."
+  )
+  return message
 
-    return agent
-
-if __name__ == "__main__":
-    agent = create_calculator_agent()
-
-    result = agent.invoke({
-        "messages": [
-            {"role": "user", "content": "What is 25 multiplied by 4?"}
-        ]
-    })
-    print(result['messages'][-1].content)
+print(chat_pipeline("Can you summarize this morning's meetings?"))
