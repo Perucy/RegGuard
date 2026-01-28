@@ -1,28 +1,48 @@
+"""OFAC SDN Compliance Check Agent"""
+
 from langchain.agents import create_agent
 from langchain_anthropic import ChatAnthropic
 from regguard.core.config import settings
-from langsmith import traceable
-from langsmith.wrappers import wrap_anthropic
-import anthropic
+from regguard.tools.ofac import check_ofac
 
-client = wrap_anthropic(anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY))
 
-@traceable(run_type="tool", name="Retrieve Context")
-def my_tool(question: str) -> str:
-  return "During this morning's meeting, we solved all world conflict."
+async def ofac_sdn_agent(company_name: str, fuzzy: bool = True) -> str:
+    """
+    Run OFAC sanctions check using an AI agent.
+    
+    Args:
+        company_name: Name to check
+        fuzzy: Enable fuzzy matching
+        
+    Returns:
+        Agent's response with sanctions check results
+    """
+    # Create LLM
+    llm = ChatAnthropic(
+        model='claude-sonnet-4-5-20250929',
+        api_key=settings.ANTHROPIC_API_KEY,
+        temperature=0
+    )
 
-@traceable(name="Chat Pipeline")
-def chat_pipeline(question: str):
-  context = my_tool(question)
-  messages = [
-      { "role": "user", "content": f"Question: {question}\nContext: {context}"}
-  ]
-  message = client.messages.create(
-      model="claude-sonnet-4-5-20250929",
-      messages=messages,
-      max_tokens=1024,
-      system="You are a helpful assistant. Please respond to the user's request only based on the given context."
-  )
-  return message
+    # Create agent with OFAC tool
+    agent = create_agent(
+        model=llm,
+        tools=[check_ofac],
+        system_prompt="You are a compliance officer. Check if companies or people are sanctioned using the OFAC tool."
+    )
 
-print(chat_pipeline("Can you summarize this morning's meetings?"))
+    # Invoke agent asynchronously (IMPORTANT!)
+    result = await agent.ainvoke({
+        "messages": [{
+            "role": "user", 
+            "content": f"Check if '{company_name}' is on the OFAC sanctions list. Use fuzzy={fuzzy}."
+        }]
+    })
+    
+    # Extract the final response
+    messages = result.get('messages', [])
+    if messages:
+        final_message = messages[-1]
+        return final_message.content
+    
+    return "No response from agent"
